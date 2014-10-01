@@ -1,0 +1,4 @@
+include posix.ninja
+
+dylib_suffix = .so
+staticlib_suffix = .a

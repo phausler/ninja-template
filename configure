@@ -1,0 +1,96 @@
+#!/usr/bin/python2.7 -B
+import argparse
+import os
+import subprocess
+from string import Template
+
+root = os.path.dirname(os.path.abspath(__file__))
+
+class BuildTemplate(Template):
+    delimiter = '%'
+    idpattern = r'[_a-z][_a-z0-9]*'
+
+def get_vendor(flavor):
+    if flavor == 'darwin':
+        return 'apple'
+    return 'unknown'
+
+
+def get_host_triple():
+    info = os.uname()
+    flavor = info[0].lower()
+    return info[-1] + '-' + get_vendor(flavor) + '-' + flavor
+
+
+def get_build_target(triple):
+    if 'android' in triple:
+        return 'android'
+    elif 'linux' in triple:
+        return 'linux'
+    elif 'apple' in triple:
+        if 'x86_64' in triple:
+            return 'mac'
+        else:
+            return 'ios'
+    elif 'mingw' in triple:
+        return 'windows'
+    else:
+        return None
+
+
+def get_build_os(triple):
+    if 'android' in triple or \
+       'linux' in triple:
+        return 'linux'
+    elif 'apple' in triple:
+        return 'darwin'
+    elif 'mingw' in triple:
+        return 'windows'
+    else:
+        return None
+
+
+def get_build_arch(triple):
+    if 'arm' in triple:
+        return 'arm'
+    elif 'i686' in triple:
+        return 'i386'
+    elif 'x86_64' in triple:
+        return 'x86_64'
+    else:
+        return None
+
+
+def main(opts):
+    global root
+    config = {
+        'build_root': root,
+        'bin_dir': os.path.join(root, 'bin'),
+        'install_dir': os.path.join(root, 'targets', opts.target),
+        'build_target': get_build_target(opts.target),
+        'build_os': get_build_os(opts.target),
+        'triple': opts.target,
+        'build_dir': os.path.join(root, 'out'),
+        'arch': get_build_arch(opts.target),
+    }
+    for base, sub_folders, files in os.walk(root):
+        if 'build.template' in files:
+            with open(os.path.join(base, 'build.template'), 'r') as template_file:
+                output_base, _ = os.path.splitext(template_file.name)
+                output_file = output_base + '.ninja'
+                with open(os.path.join(output_file), 'w') as build_file:
+                    config['__file__'] = output_file
+                    config['__dir__'] = os.path.relpath(os.path.dirname(output_file), root)
+                    config['__path__'] = os.path.dirname(output_file)
+
+                    t = BuildTemplate(template_file.read())
+                    t.delimiter = '%'
+                    build_file.write(t.substitute(config))
+                    build_file.close()
+                template_file.close()
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--target', choices=[name for name in os.listdir(os.path.join(root, 'targets')) if os.path.isdir(name)], default=get_host_triple())
+    main(parser.parse_args())
